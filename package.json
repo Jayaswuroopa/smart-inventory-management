@@ -1,8 +1,13 @@
 {
   "name": "inventory-manager-root",
   "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
-    "build": "cd frontend && npm install && npm run build && cd .. && rm -rf public && cp -r frontend/build public",
-    "install": "cd frontend && npm install"
+    "build": "npm run build --workspace=frontend",
+    "start": "npm start --workspace=frontend",
+    "backend": "npm run dev --workspace=backend"
   }
 }
