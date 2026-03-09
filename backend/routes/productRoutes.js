@@ -1,8 +1,17 @@
 const express = require('express');
 const router = express.Router();
 const Product = require('../models/productModel');
-const protect = require('../middleware/authMiddleware');
+const { protect, adminOnly } = require('../middleware/authMiddleware');
 const nodemailer = require('nodemailer');
+const Joi = require('joi');
+
+const productSchema = Joi.object({
+  name: Joi.string().required(),
+  category: Joi.string().required(),
+  quantity: Joi.number().min(0).required(),
+  price: Joi.number().min(0).required(),
+  barcode: Joi.string().allow('').optional()
+});
 
 // Email alert function
 const sendLowStockEmail = async (product) => {
@@ -46,11 +55,46 @@ const sendLowStockEmail = async (product) => {
   }
 };
 
-// GET all products
+// GET all products (with pagination, search, and filter)
 router.get('/', protect, async (req, res) => {
   try {
-    const products = await Product.find().sort({ createdAt: -1 });
-    res.json(products);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Building the query object
+    let query = {};
+    if (req.query.search) {
+      query.$or = [
+        { name: { $regex: req.query.search, $options: 'i' } },
+        { category: { $regex: req.query.search, $options: 'i' } }
+      ];
+    }
+    if (req.query.category && req.query.category !== 'All') {
+      query.category = req.query.category;
+    }
+
+    // Determine sorting
+    let sortObj = { createdAt: -1 };
+    if (req.query.sort === 'priceAsc') sortObj = { price: 1 };
+    if (req.query.sort === 'priceDesc') sortObj = { price: -1 };
+    if (req.query.sort === 'quantityAsc') sortObj = { quantity: 1 };
+    if (req.query.sort === 'quantityDesc') sortObj = { quantity: -1 };
+
+    const products = await Product.find(query)
+      .sort(sortObj)
+      .skip(skip)
+      .limit(limit);
+
+    // Get total count for frontend pagination
+    const total = await Product.countDocuments(query);
+
+    res.json({
+      products,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+      totalItems: total
+    });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch products' });
   }
@@ -58,9 +102,12 @@ router.get('/', protect, async (req, res) => {
 
 // POST add a new product
 router.post('/', protect, async (req, res) => {
-  const { name, category, quantity, price } = req.body;
+  const { error } = productSchema.validate(req.body);
+  if (error) return res.status(400).json({ error: error.details[0].message });
+
+  const { name, category, quantity, price, barcode } = req.body;
   try {
-    const product = await Product.create({ name, category, quantity, price });
+    const product = await Product.create({ name, category, quantity, price, barcode });
     if (product.quantity <= 5) await sendLowStockEmail(product);
     res.status(201).json(product);
   } catch (err) {
@@ -70,11 +117,14 @@ router.post('/', protect, async (req, res) => {
 
 // PUT update a product
 router.put('/:id', protect, async (req, res) => {
-  const { name, category, quantity, price } = req.body;
+  const { error } = productSchema.validate(req.body);
+  if (error) return res.status(400).json({ error: error.details[0].message });
+
+  const { name, category, quantity, price, barcode } = req.body;
   try {
     const product = await Product.findByIdAndUpdate(
       req.params.id,
-      { name, category, quantity, price },
+      { name, category, quantity, price, barcode },
       { new: true, runValidators: true }
     );
     if (!product) return res.status(404).json({ error: 'Product not found' });

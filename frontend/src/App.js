@@ -3,7 +3,7 @@ import axios from 'axios';
 import Dashboard from './components/Dashboard';
 import ProductForm from './components/ProductForm';
 import ProductList from './components/ProductList';
-import Login from './components/Login';
+import Login from './components/login';
 import './App.css';
 
 const API = '/api/products';
@@ -32,11 +32,16 @@ function App() {
     }
   };
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const limit = 10;
+
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(API, authHeaders);
-      setProducts(res.data);
+      const res = await axios.get(`${API}?page=${currentPage}&limit=${limit}&search=${search}&category=${categoryFilter}`, authHeaders);
+      setProducts(res.data.products);
+      setTotalPages(res.data.totalPages);
     } catch {
       showToast('Failed to load products', 'error');
     } finally {
@@ -45,8 +50,12 @@ function App() {
   };
 
   useEffect(() => {
-    if (token) fetchProducts();
-  }, [token]);
+    if (token) {
+       // Debounce the search
+       const timeoutId = setTimeout(() => fetchProducts(), 300);
+       return () => clearTimeout(timeoutId);
+    }
+  }, [token, currentPage, search, categoryFilter]);
 
   const handleLogin = (newToken, name, role) => {
     setToken(newToken);
@@ -232,7 +241,7 @@ function App() {
             </div>
 
             <ProductList
-              products={filtered}
+              products={products}
               loading={loading}
               onDelete={handleDelete}
               onEdit={p => {
@@ -241,6 +250,28 @@ function App() {
               }}
               userRole={userRole}
             />
+
+            {totalPages > 1 && (
+              <div className="pagination">
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(p => p - 1)}
+                  className="page-btn"
+                >
+                  ◀ Prev
+                </button>
+                <span className="page-info">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(p => p + 1)}
+                  className="page-btn"
+                >
+                  Next ▶
+                </button>
+              </div>
+            )}
 
           </div>
         )}
