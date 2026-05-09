@@ -18,15 +18,25 @@ app.get('/', (req, res) => {
   res.json({ message: 'Inventory Manager API is running' });
 });
 
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log('✅ MongoDB connected');
-    app.listen(process.env.PORT, () => {
-      console.log(`🚀 Server running on http://localhost:${process.env.PORT}`);
+// Only listen if not running as a Vercel function
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  mongoose
+    .connect(process.env.MONGO_URI)
+    .then(() => {
+      console.log('✅ MongoDB connected');
+      const PORT = process.env.PORT || 5000;
+      app.listen(PORT, () => {
+        console.log(`🚀 Server running on http://localhost:${PORT}`);
+      });
+    })
+    .catch((err) => {
+      console.error('❌ MongoDB connection error:', err.message);
     });
-  })
-  .catch((err) => {
-    console.error('❌ MongoDB connection error:', err.message);
-    process.exit(1);
-  });
+} else {
+  // On Vercel, we just connect to MongoDB (Vercel will handle the listen)
+  mongoose.connect(process.env.MONGO_URI)
+    .then(() => console.log('✅ MongoDB connected (Serverless)'))
+    .catch(err => console.error('❌ MongoDB connection error:', err));
+}
+
+module.exports = app;
